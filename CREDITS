@@ -1,0 +1,3 @@
+ - FreeType Library used for text rendering (freetype.org)
+ - stb_rect_pack.h by Sean Barrett (nothings.org / github.com/nothings/stb)
+ - Aileron (cc0 font) by Sora Sagano (dotcolon.net)
