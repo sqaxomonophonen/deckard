@@ -79,7 +79,7 @@ struct glyph_cache {
 	struct glyph_cache_entry_key* entry_keys;
 	struct glyph_cache_entry_info* entry_info;
 	uint64_t* entry_tags;
-	int* entry_qsort_indices; // qsort helper
+	int* entry_repack_indices; // only used during repacking
 };
 
 static struct {
@@ -176,13 +176,13 @@ static void reset_glyph_cache()
 		if (gc->entry_keys != NULL) free(gc->entry_keys);
 		if (gc->entry_info != NULL) free(gc->entry_info);
 		if (gc->entry_tags != NULL) free(gc->entry_tags);
-		if (gc->entry_qsort_indices != NULL) free(gc->entry_qsort_indices);
+		if (gc->entry_repack_indices != NULL) free(gc->entry_repack_indices);
 
 		gc->max_entries = (gc->width*gc->height) / (4*4);
 		AN(gc->entry_keys = calloc(gc->max_entries, sizeof(*gc->entry_keys)));
 		AN(gc->entry_info = calloc(gc->max_entries, sizeof(*gc->entry_info)));
 		AN(gc->entry_tags = calloc(gc->max_entries, sizeof(*gc->entry_tags)));
-		AN(gc->entry_qsort_indices = calloc(gc->max_entries, sizeof(*gc->entry_qsort_indices)));
+		AN(gc->entry_repack_indices = calloc(gc->max_entries, sizeof(*gc->entry_repack_indices)));
 	}
 
 	gc->n_entries = 0;
@@ -250,29 +250,18 @@ static int pack_glyph(int font_handle, int glyph_index, stbrp_rect* rect)
 	return 0;
 }
 
-static int repack_glyph_cache()
+static int repack_glyph_cache_from_indices()
 {
 	struct glyph_cache* gc = &state.glyph_cache;
 
-	// initialize indicies for qsort
-	for (int i = 0; i < gc->n_entries; i++) {
-		gc->entry_qsort_indices[i] = i;
-	}
-
-	// sort indices by MRU (Most Recently Used)
-	qsort(gc->entry_qsort_indices, gc->n_entries, sizeof(*gc->entry_qsort_indices), _repack_tag_compar);
-
-	// keep 20% MRU
-	gc->n_entries /= 5;
-
 	// sort indices by key order
-	qsort(gc->entry_qsort_indices, gc->n_entries, sizeof(*gc->entry_qsort_indices), _repack_key_compar);
+	qsort(gc->entry_repack_indices, gc->n_entries, sizeof(*gc->entry_repack_indices), _repack_key_compar);
 
 	// move glyph cache entries into new positions
 	for (int i = 0; i < gc->n_entries; i++) {
-		int j = gc->entry_qsort_indices[i];
+		int j = gc->entry_repack_indices[i];
 		PARANOID_ASSERT(i <= j);
-		PARANOID_ASSERT(i == 0 || gc->entry_qsort_indices[i-1] < j);
+		PARANOID_ASSERT(i == 0 || gc->entry_repack_indices[i-1] < j);
 		if (i == j) continue;
 		memcpy(&gc->entry_keys[i], &gc->entry_keys[j], sizeof(*gc->entry_keys));
 		memcpy(&gc->entry_info[i], &gc->entry_info[j], sizeof(*gc->entry_info));
@@ -298,6 +287,24 @@ static int repack_glyph_cache()
 	}
 
 	return 0;
+}
+
+static int repack_glyph_cache()
+{
+	struct glyph_cache* gc = &state.glyph_cache;
+
+	// initialize indicies for qsort
+	for (int i = 0; i < gc->n_entries; i++) {
+		gc->entry_repack_indices[i] = i;
+	}
+
+	// sort indices by MRU (Most Recently Used)
+	qsort(gc->entry_repack_indices, gc->n_entries, sizeof(*gc->entry_repack_indices), _repack_tag_compar);
+
+	// keep 20% MRU
+	gc->n_entries /= 5;
+
+	return repack_glyph_cache_from_indices();
 }
 
 static int _find_or_insert_glyph_cache_entry_index(struct glyph_cache_entry_key key)
@@ -557,9 +564,6 @@ int d_open_font(char* font_spec, int size)
 /* close font; pass font_handle returned by d_open_font */
 void d_close_font(int font_handle)
 {
-	// XXX TODO repack glyph cache? not only for performance; things might
-	// explode in hillarious ways if a font_handle is reused
-
 	ASSERT(font_handle >= 0);
 	ASSERT(font_handle < MAX_FONT_HANDLES);
 	struct font* f = &fonts[font_handle];
@@ -567,6 +571,20 @@ void d_close_font(int font_handle)
 	FT_Done_Face(f->face);
 	sys_munmap_file(&f->filemmap);
 	f->open = 0;
+
+	// repack font cache
+	struct glyph_cache* gc = &state.glyph_cache;
+	int n = gc->n_entries;
+	int j = 0;
+	for (int i = 0; i < n; i++) {
+		if (gc->entry_keys[i].font_handle == font_handle) continue;
+		gc->entry_repack_indices[j++] = i;
+	}
+	gc->n_entries = j;
+
+	if (repack_glyph_cache_from_indices() < 0) {
+		reset_glyph_cache();
+	}
 }
 
 void d_text_set_cursor(float x, float y)
