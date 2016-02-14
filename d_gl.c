@@ -113,10 +113,6 @@ void d_blit(struct d_texture* t, int sx, int sy, int sw, int sh, float dx, float
 	glEnable(GL_TEXTURE_2D);
 	glBindTexture(GL_TEXTURE_2D, t->texture);
 
-	glEnable(GL_BLEND);
-	//glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA); CHKGL;
-	glBlendFunc(GL_ONE, GL_ONE); CHKGL; // XXX additive - need to be set elsewhere
-
 	float tsx = (float)sx / (float)t->width;
 	float tsy = (float)sy / (float)t->height;
 	float tsw = (float)sw / (float)t->width;
@@ -138,6 +134,7 @@ void d_begin(int win_id)
 	glMatrixMode(GL_PROJECTION); CHKGL;
 	glLoadIdentity(); CHKGL;
 	glOrtho(0, width, height, 0, -1, 1); CHKGL;
+	glEnable(GL_BLEND);
 }
 
 void d_clear()
@@ -146,3 +143,8 @@ void d_clear()
 	glClear(GL_COLOR_BUFFER_BIT);
 }
 
+
+void d_set_blend_mode_additive()
+{
+	glBlendFunc(GL_ONE, GL_ONE); CHKGL;
+}

@@ -8,6 +8,8 @@ int ui_main(int argc, char** argv)
 
 	d_reset_glyph_cache(2048, 2048);
 
+	d_set_blend_mode_additive();
+
 	int font_handle = d_open_font("builtin:Aileron-Regular.otf", 10);
 	if (font_handle == -1) return 1;
 

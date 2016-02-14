@@ -25,10 +25,10 @@ void d_blit(struct d_texture*, int sx, int sy, int sw, int sh, float dx, float d
 void d_inc_frame_tag();
 uint64_t d_get_frame_tag();
 
-
 void d_begin(int win_id);
 void d_clear();
 
+void d_set_blend_mode_additive();
 
 // font
 void d_reset_glyph_cache(int glyph_cache_width, int glyph_cache_height);
