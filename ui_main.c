@@ -33,7 +33,7 @@ int ui_main(int argc, char** argv)
 		d_clear();
 
 		d_text_set_cursor(20.0 + ((float)d_get_frame_tag()) / 32.0, 20 + ((float)d_get_frame_tag()) / 64.0);
-		d_printf(font_handle, "hello world HELLO WORLD!!?@#!$^&*( joeqsixpack@gmail.com");
+		d_printf(font_handle, "hello world HELLO WORLD!!?@#!$^&*( joeqsixpack@gmail.com\nframe tag: %ld", d_get_frame_tag());
 
 		win_flip(main_window);
 	}

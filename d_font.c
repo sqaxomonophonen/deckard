@@ -34,6 +34,7 @@ struct font {
 	struct sys_mmap_file filemmap;
 	int size;
 	int has_kerning;
+	float line_spacing;
 	FT_Face face;
 };
 
@@ -127,6 +128,7 @@ static int open_font(char* path, int index, int size)
 	}
 
 	f->size = size;
+	f->line_spacing = (float)f->face->size->metrics.height / 64.0;
 	f->has_kerning = FT_HAS_KERNING(f->face);
 	f->open = 1;
 
@@ -470,7 +472,7 @@ static int draw_string_n(int font_handle, int n, char* str)
 
 		if (codepoint == '\n') {
 			state.x = state.x0;
-			// TODO state.y += ???
+			state.y += fonts[font_handle].line_spacing;
 			prev_glyph_index = 0;
 			continue;
 		}
