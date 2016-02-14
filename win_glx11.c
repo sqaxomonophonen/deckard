@@ -20,7 +20,6 @@
 
 #include "a.h"
 #include "deckard.h"
-#include "ui.h"
 
 
 static Display* dpy = NULL;
@@ -152,6 +151,7 @@ static int tmp_ctx_error_handler(Display *dpy, XErrorEvent *ev)
 	return 0;
 }
 
+int app_main(int argc, char** argv);
 
 int main(int argc, char** argv)
 {
@@ -292,7 +292,7 @@ int main(int argc, char** argv)
 	}
 
 
-	int exit_status = ui_main(argc, argv);
+	int exit_status = app_main(argc, argv);
 
 	XCloseDisplay(dpy);
 

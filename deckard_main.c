@@ -1,7 +1,7 @@
 #include "win.h"
 #include "d.h"
 
-int ui_main(int argc, char** argv)
+int app_main(int argc, char** argv)
 {
 	win_id main_window = win_open();
 	win_make_current(main_window);

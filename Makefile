@@ -19,10 +19,10 @@ d_gl.o: d_gl.c
 d_font.o: d_font.c
 	$(CC) $(CFLAGS) $(shell pkg-config freetype2 --cflags) -c $<
 
-ui_main.o: ui_main.c
+deckard_main.o: deckard_main.c
 	$(CC) $(CFLAGS) -c $<
 
-deckard: a.o sys_posix.o d_gl.o d_font.o ui_main.o win_glx11.o
+deckard: a.o sys_posix.o d_gl.o d_font.o deckard_main.o win_glx11.o
 	$(CC) $(LINK) $(shell pkg-config freetype2 --libs) $^ -o $@
 
 clean:
