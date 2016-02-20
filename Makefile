@@ -22,13 +22,16 @@ win_glx11.o: win_glx11.c
 d_gl.o: d_gl.c
 	$(CC) $(CFLAGS) -c $<
 
+d_main_atlas.o: d_main_atlas.c
+	$(CC) $(CFLAGS) -c $<
+
 d_font.o: d_font.c
 	$(CC) $(CFLAGS) $(shell pkg-config freetype2 --cflags) -c $<
 
 deckard_main.o: deckard_main.c
 	$(CC) $(CFLAGS) -c $<
 
-deckard: gl3w.o a.o log.o sys_posix.o d_gl.o d_font.o deckard_main.o win_glx11.o
+deckard: gl3w.o a.o log.o sys_posix.o d_gl.o d_main_atlas.o d_font.o deckard_main.o win_glx11.o
 	$(CC) $(LINK) $(shell pkg-config freetype2 --libs) $^ -o $@
 
 clean:

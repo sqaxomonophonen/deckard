@@ -13,7 +13,6 @@ int app_main(int argc, char** argv)
 	win_make_current(main_window); // d_init will fail without this
 
 	d_init();
-	d_reset_glyph_cache(2048, 2048);
 
 	int font_handle = d_open_font("builtin:Aileron-Regular.otf", 20);
 	if (font_handle == -1) {

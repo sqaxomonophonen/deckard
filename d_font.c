@@ -10,18 +10,6 @@
 #include "sys.h"
 #include "utf8_decode.h"
 
-#define STBRP_ASSERT ASSERT
-#define STBRP_STATIC
-#define STB_RECT_PACK_IMPLEMENTATION
-#include "stb_rect_pack.h"
-
-#if 0
-#define STBTT_assert ASSERT
-#define STBTT_STATIC
-#define STB_TRUETYPE_IMPLEMENTATION
-#include "stb_truetype.h"
-#endif
-
 #define MAX_FONT_HANDLES (256)
 #define MAX_GLYPH_SIZE (256)
 
@@ -63,17 +51,6 @@ static inline int glyph_cache_key_compar(struct glyph_cache_entry_key a, struct 
 
 struct glyph_cache {
 	int initialized;
-	int width, height, prev_width, prev_height;
-
-	struct d_texture texture;
-
-	// ft2
-	int ft2_init;
-	FT_Library ft2;
-
-	// stb_rectpack.h stuff
-	stbrp_context rp_ctx;
-	stbrp_node* rp_nodes;
 
 	// glyph entries
 	int max_entries, n_entries;
@@ -84,6 +61,10 @@ struct glyph_cache {
 };
 
 static struct {
+	// ft2
+	int ft2_init;
+	FT_Library ft2;
+
 	float x0, x, y;
 	struct glyph_cache glyph_cache;
 } state;
@@ -109,8 +90,12 @@ static int open_font(char* path, int index, int size)
 		return -1;
 	}
 
+	if (!state.ft2_init) {
+		AZ(FT_Init_FreeType(&state.ft2) != 0);
+	}
+
 	int err = FT_New_Memory_Face(
-		state.glyph_cache.ft2,
+		state.ft2,
 		f->filemmap.ptr,
 		f->filemmap.sz,
 		index,
@@ -135,52 +120,18 @@ static int open_font(char* path, int index, int size)
 	return font_handle;
 }
 
-static int get_stbrp_node_count()
-{
-	return state.glyph_cache.width;
-}
-
-static void reset_rect_pack()
-{
-	struct glyph_cache* gc = &state.glyph_cache;
-	stbrp_init_target(
-		&gc->rp_ctx,
-		gc->width,
-		gc->height,
-		gc->rp_nodes,
-		get_stbrp_node_count());
-	stbrp_setup_heuristic(
-		&gc->rp_ctx,
-		STBRP_HEURISTIC_Skyline_default);
-}
-
 static void reset_glyph_cache()
 {
 	struct glyph_cache* gc = &state.glyph_cache;
 
 	if (!gc->initialized) {
-		AZ(FT_Init_FreeType(&gc->ft2) != 0);
-	}
-
-	int new_dimensions = gc->width != gc->prev_width || gc->height != gc->prev_height;
-
-	if (new_dimensions) {
-		if (gc->rp_nodes) free(gc->rp_nodes);
-		AN(gc->rp_nodes = calloc(get_stbrp_node_count(), sizeof(stbrp_node)));
-	}
-
-	reset_rect_pack();
-
-	if (new_dimensions) {
-		if (gc->initialized) d_texture_free(&gc->texture);
-		d_texture_init(&gc->texture, gc->width, gc->height);
-
 		if (gc->entry_keys != NULL) free(gc->entry_keys);
 		if (gc->entry_info != NULL) free(gc->entry_info);
 		if (gc->entry_tags != NULL) free(gc->entry_tags);
 		if (gc->entry_repack_indices != NULL) free(gc->entry_repack_indices);
 
-		gc->max_entries = (gc->width*gc->height) / (4*4);
+		struct d_texture* t = d_main_atlas_get_texture();
+		gc->max_entries = (t->width*t->height) / (4*4);
 		AN(gc->entry_keys = calloc(gc->max_entries, sizeof(*gc->entry_keys)));
 		AN(gc->entry_info = calloc(gc->max_entries, sizeof(*gc->entry_info)));
 		AN(gc->entry_tags = calloc(gc->max_entries, sizeof(*gc->entry_tags)));
@@ -190,8 +141,6 @@ static void reset_glyph_cache()
 	gc->n_entries = 0;
 
 	gc->initialized = 1;
-	gc->prev_width = gc->width;
-	gc->prev_height = gc->height;
 }
 
 static int _repack_tag_compar(const void* va, const void* vb)
@@ -210,10 +159,8 @@ static int _repack_key_compar(const void* va, const void* vb)
 	return glyph_cache_key_compar(gc->entry_keys[ia], gc->entry_keys[ib]);
 }
 
-static int pack_glyph(int font_handle, int glyph_index, stbrp_rect* rect)
+static int pack_glyph(int font_handle, int glyph_index, short* width, short* height, short* x, short* y)
 {
-	AN(rect);
-
 	struct font* font = &fonts[font_handle];
 	FT_Face face = font->face;
 
@@ -236,18 +183,12 @@ static int pack_glyph(int font_handle, int glyph_index, stbrp_rect* rect)
 		return -1;
 	}
 
-	rect->w = glyph_width + 2;
-	rect->h = glyph_height + 2;
-	stbrp_pack_rects(&state.glyph_cache.rp_ctx, rect, 1);
-	if (!rect->was_packed) {
+	if (d_main_atlas_pack_intensity(glyph_width, glyph_height, face->glyph->bitmap.buffer, x, y) == -1) {
 		return -2;
 	}
 
-	d_texture_sub_image_intensity(
-		&state.glyph_cache.texture,
-		rect->x + 1, rect->y + 1,
-		glyph_width, glyph_height,
-		face->glyph->bitmap.buffer);
+	if (width != NULL) *width = glyph_width;
+	if (height != NULL) *height = glyph_height;
 
 	return 0;
 }
@@ -271,21 +212,19 @@ static int repack_glyph_cache_from_indices()
 	}
 
 	// repack glyphs
-	reset_rect_pack();
-	d_texture_clear(&gc->texture);
+	d_main_atlas_reset();
 	for (int i = 0; i < gc->n_entries; i++) {
 		struct glyph_cache_entry_info* info = &gc->entry_info[i];
-		stbrp_rect rect;
 		int ret = pack_glyph(
 			gc->entry_keys[i].font_handle,
 			info->glyph_index,
-			&rect);
+			NULL, NULL,
+			&info->x,
+			&info->y);
 		if (ret < 0) {
 			PARANOID_ASSERT(ret != -1); // we've packed it before!
 			return -2;
 		}
-		info->x = rect.x;
-		info->y = rect.y;
 	}
 
 	return 0;
@@ -387,8 +326,8 @@ static int _find_or_insert_glyph_cache_entry_index(struct glyph_cache_entry_key 
 		return -1;
 	}
 
-	stbrp_rect rect;
-	pack_glyph(key.font_handle, glyph_index, &rect);
+	short width, height, x, y;
+	pack_glyph(key.font_handle, glyph_index, &width, &height, &x, &y);
 
 	int insert_before = cmp > 0 ? i : i + 1;
 	PARANOID_ASSERT(insert_before >= 0);
@@ -403,10 +342,10 @@ static int _find_or_insert_glyph_cache_entry_index(struct glyph_cache_entry_key 
 
 	gc->entry_keys[insert_before] = key;
 	gc->entry_info[insert_before] = (struct glyph_cache_entry_info) {
-		.x = rect.x,
-		.y = rect.y,
-		.w = rect.w,
-		.h = rect.h,
+		.x = x,
+		.y = y,
+		.w = width,
+		.h = height,
 		.top = font->face->glyph->bitmap_top,
 		.left = font->face->glyph->bitmap_left,
 		.advance_x = (float)font->face->glyph->advance.x / 64.0,
@@ -496,7 +435,7 @@ static int draw_string_n(int font_handle, int n, char* str)
 		}
 
 		d_blit(
-			&state.glyph_cache.texture,
+			d_main_atlas_get_texture(),
 			info->x, info->y, info->w, info->h,
 			state.x + info->left, state.y - info->top);
 
@@ -511,13 +450,6 @@ static int draw_string_n(int font_handle, int n, char* str)
 
 ////////////////////////////////////////
 /// public
-
-void d_reset_glyph_cache(int width, int height)
-{
-	state.glyph_cache.width = width;
-	state.glyph_cache.height = height;
-	reset_glyph_cache();
-}
 
 char* d_font_get_list()
 {

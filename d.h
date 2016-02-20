@@ -36,7 +36,6 @@ void d_set_color(union vec4 color);
 void d_set_vertical_shade(union vec4 color0, union vec4 color1);
 
 // font
-void d_reset_glyph_cache(int glyph_cache_width, int glyph_cache_height);
 
 /* returns list of (display_name,font_spec) pairs. elements are
  * null-terminated, and so is the list itself. i.e. a list containing two fonts
@@ -59,6 +58,13 @@ void d_text_set_cursor(float x, float y);
 
 int d_str(int font_handle, char* str);
 int d_printf(int font_handle, const char* fmt, ...) __attribute__ ((format (printf, 2, 3)));
+
+
+// main atlas
+struct d_texture* d_main_atlas_get_texture();
+void d_main_atlas_reset();
+int d_main_atlas_pack(short width, short height, void* data, short* x, short* y);
+int d_main_atlas_pack_intensity(short width, short height, void* data, short* x, short* y);
 
 #define D_H
 #endif
