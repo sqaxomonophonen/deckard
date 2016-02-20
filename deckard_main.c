@@ -43,6 +43,7 @@ int app_main(int argc, char** argv)
 		);
 		d_text_set_cursor(20.0 + ((float)d_get_frame_tag()) / 32.0, 20 + ((float)d_get_frame_tag()) / 64.0);
 		d_printf(font_handle, "hello world HELLO WORLD!!?@#!$^&*( joeqsixpack@gmail.com\nframe tag: %ld", d_get_frame_tag());
+		d_rect(100, 200, 500, 30);
 
 		d_end();
 

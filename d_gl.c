@@ -339,6 +339,24 @@ void d_texture_sub_image_intensity(struct d_texture* t, int x, int y, int w, int
 	MTS_LEAVE(0);
 }
 
+void d_rect(float x, float y, float width, float height)
+{
+	float x0 = x;
+	float y0 = y;
+	float x1 = x + width;
+	float y1 = y + height;
+	float u,v;
+	d_main_atlas_get_dot_uv(&u, &v);
+	struct draw_vertex vs[4] = {
+		{ .position = { .x = x0, .y = y0 }, .uv = { .u = u, .v = v }, .color = draw_scope.color0 },
+		{ .position = { .x = x1, .y = y0 }, .uv = { .u = u, .v = v }, .color = draw_scope.color0 },
+		{ .position = { .x = x1, .y = y1 }, .uv = { .u = u, .v = v }, .color = draw_scope.color1 },
+		{ .position = { .x = x0, .y = y1 }, .uv = { .u = u, .v = v }, .color = draw_scope.color1 }
+	};
+	ElementType es[6] = {0,1,2,0,2,3};
+	draw_append(d_main_atlas_get_texture(), 4, 6, vs, es);
+}
+
 void d_blit(struct d_texture* t, int sx, int sy, int sw, int sh, float dx, float dy)
 {
 	float dx0 = dx;
@@ -346,16 +364,15 @@ void d_blit(struct d_texture* t, int sx, int sy, int sw, int sh, float dx, float
 	float dx1 = dx + sw;
 	float dy1 = dy + sh;
 
-	float tsx0 = (float)sx / (float)t->width;
-	float tsy0 = (float)sy / (float)t->height;
-	float tsx1 = tsx0 + (float)sw / (float)t->width;
-	float tsy1 = tsy0 + (float)sh / (float)t->height;
+	float u0,v0,u1,v1;
+	d_texture_get_uv(t, sx, sy, &u0, &v0);
+	d_texture_get_uv(t, sx + sw, sy + sh, &u1, &v1);
 
 	struct draw_vertex vs[4] = {
-		{ .position = { .x = dx0, .y = dy0 }, .uv = { .u = tsx0, .v = tsy0 }, .color = draw_scope.color0 },
-		{ .position = { .x = dx1, .y = dy0 }, .uv = { .u = tsx1, .v = tsy0 }, .color = draw_scope.color0 },
-		{ .position = { .x = dx1, .y = dy1 }, .uv = { .u = tsx1, .v = tsy1 }, .color = draw_scope.color1 },
-		{ .position = { .x = dx0, .y = dy1 }, .uv = { .u = tsx0, .v = tsy1 }, .color = draw_scope.color1 }
+		{ .position = { .x = dx0, .y = dy0 }, .uv = { .u = u0, .v = v0 }, .color = draw_scope.color0 },
+		{ .position = { .x = dx1, .y = dy0 }, .uv = { .u = u1, .v = v0 }, .color = draw_scope.color0 },
+		{ .position = { .x = dx1, .y = dy1 }, .uv = { .u = u1, .v = v1 }, .color = draw_scope.color1 },
+		{ .position = { .x = dx0, .y = dy1 }, .uv = { .u = u0, .v = v1 }, .color = draw_scope.color1 }
 	};
 	ElementType es[6] = {0,1,2,0,2,3};
 	draw_append(t, 4, 6, vs, es);

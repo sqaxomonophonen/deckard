@@ -18,22 +18,37 @@ struct d_texture {
 	#endif
 };
 
+// counter that increments every frame
+void d_inc_frame_tag();
+uint64_t d_get_frame_tag();
+
+// textures
 void d_texture_init(struct d_texture*, int width, int height);
 void d_texture_free(struct d_texture*);
 void d_texture_clear(struct d_texture*);
 void d_texture_sub_image(struct d_texture*, int x, int y, int w, int h, void* data);
 void d_texture_sub_image_intensity(struct d_texture* t, int x, int y, int w, int h, void* restrict data);
-void d_blit(struct d_texture*, int sx, int sy, int sw, int sh, float dx, float dy);
+static inline void d_texture_get_uv(struct d_texture* t, int x, int y, float* u, float* v)
+{
+	if (u != NULL) *u = (float)x / (float)t->width;
+	if (v != NULL) *v = (float)y / (float)t->height;
+}
 
-// counter that increments every frame
-void d_inc_frame_tag();
-uint64_t d_get_frame_tag();
 
+// drawing
 void d_begin(int win_id);
 void d_end();
 
 void d_set_color(union vec4 color);
 void d_set_vertical_shade(union vec4 color0, union vec4 color1);
+
+void d_rect(float x, float y, float width, float height);
+void d_blit(struct d_texture*, int sx, int sy, int sw, int sh, float dx, float dy);
+
+int d_str(int font_handle, char* str);
+int d_printf(int font_handle, const char* fmt, ...) __attribute__ ((format (printf, 2, 3)));
+
+
 
 // font
 
@@ -56,15 +71,13 @@ void d_close_font(int font_handle);
 
 void d_text_set_cursor(float x, float y);
 
-int d_str(int font_handle, char* str);
-int d_printf(int font_handle, const char* fmt, ...) __attribute__ ((format (printf, 2, 3)));
-
 
 // main atlas
 struct d_texture* d_main_atlas_get_texture();
 void d_main_atlas_reset();
 int d_main_atlas_pack(short width, short height, void* data, short* x, short* y);
 int d_main_atlas_pack_intensity(short width, short height, void* data, short* x, short* y);
+void d_main_atlas_get_dot_uv(float* u, float* v);
 
 #define D_H
 #endif

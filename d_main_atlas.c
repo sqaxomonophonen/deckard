@@ -11,8 +11,9 @@ static int initialized;
 static struct d_texture texture;
 static stbrp_context rp_ctx;
 static stbrp_node* rp_nodes;
+float dot_u, dot_v;
 
-static int pack(short width, short height, short* x, short* y)
+static int rect_pack(short width, short height, short* x, short* y)
 {
 	stbrp_rect rect;
 	rect.w = width + 2;
@@ -23,10 +24,23 @@ static int pack(short width, short height, short* x, short* y)
 	return rect.was_packed ? 0 : -1;
 }
 
-struct d_texture* d_main_atlas_get_texture()
+static void pack_dot()
+{
+	char dot[] = {0xff, 0xff, 0xff, 0xff};
+	short x, y;
+	d_main_atlas_pack_intensity(2, 2, dot, &x, &y);
+	d_texture_get_uv(d_main_atlas_get_texture(), x+1, y+1, &dot_u, &dot_v);
+}
+
+static inline void initialize()
 {
 	if (!initialized) d_main_atlas_reset();
 	AN(initialized);
+}
+
+struct d_texture* d_main_atlas_get_texture()
+{
+	initialize();
 	return &texture;
 }
 
@@ -52,20 +66,27 @@ void d_main_atlas_reset()
 
 	d_texture_clear(&texture);
 
-	// TODO pack common fixed rects
+	pack_dot();
 }
 
 int d_main_atlas_pack(short width, short height, void* data, short* x, short* y)
 {
-	int r = pack(width, height, x, y);
+	int r = rect_pack(width, height, x, y);
 	if (r == 0) d_texture_sub_image(&texture, *x, *y, width, height, data);
 	return r;
 }
 
 int d_main_atlas_pack_intensity(short width, short height, void* data, short* x, short* y)
 {
-	int r = pack(width, height, x, y);
+	int r = rect_pack(width, height, x, y);
 	if (r == 0) d_texture_sub_image_intensity(&texture, *x, *y, width, height, data);
 	return r;
+}
+
+void d_main_atlas_get_dot_uv(float* u, float* v)
+{
+	initialize();
+	if (u != NULL) *u = dot_u;
+	if (v != NULL) *v = dot_v;
 }
 
