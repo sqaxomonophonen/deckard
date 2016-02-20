@@ -1,10 +1,16 @@
 USE=-DUSE_GL
-CFLAGS=-g -O0 -std=c99 -DGLX11 -Wall $(USE)
-LINK=-lm -lX11 -lGL -lrt -Wall
+CFLAGS=-g -O0 -std=c99 -DGLX11 -Wall -Igl3w/include $(USE)
+LINK=-ldl -lm -lX11 -lGL -lrt -Wall
 
 all: deckard
 
+gl3w.o: gl3w/src/gl3w.c
+	$(CC) $(CFLAGS) -c $<
+
 a.o: a.c
+	$(CC) $(CFLAGS) -c $<
+
+log.o: log.c
 	$(CC) $(CFLAGS) -c $<
 
 sys_posix.o: sys_posix.c
@@ -22,7 +28,7 @@ d_font.o: d_font.c
 deckard_main.o: deckard_main.c
 	$(CC) $(CFLAGS) -c $<
 
-deckard: a.o sys_posix.o d_gl.o d_font.o deckard_main.o win_glx11.o
+deckard: gl3w.o a.o log.o sys_posix.o d_gl.o d_font.o deckard_main.o win_glx11.o
 	$(CC) $(LINK) $(shell pkg-config freetype2 --libs) $^ -o $@
 
 clean:

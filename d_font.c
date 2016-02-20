@@ -173,7 +173,7 @@ static void reset_glyph_cache()
 
 	if (new_dimensions) {
 		if (gc->initialized) d_texture_free(&gc->texture);
-		d_texture_init(&gc->texture, 1, gc->width, gc->height);
+		d_texture_init(&gc->texture, gc->width, gc->height);
 
 		if (gc->entry_keys != NULL) free(gc->entry_keys);
 		if (gc->entry_info != NULL) free(gc->entry_info);
@@ -243,7 +243,7 @@ static int pack_glyph(int font_handle, int glyph_index, stbrp_rect* rect)
 		return -2;
 	}
 
-	d_texture_sub_image(
+	d_texture_sub_image_intensity(
 		&state.glyph_cache.texture,
 		rect->x + 1, rect->y + 1,
 		glyph_width, glyph_height,

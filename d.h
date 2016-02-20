@@ -6,19 +6,21 @@
 #error "implementation missing"
 #endif
 
+void d_init();
+
 struct d_texture {
 	int width, height;
 	#if USE_GL
 	GLuint texture;
-	GLenum format;
-	int channels;
+	uint64_t draw_tag;
 	#endif
 };
 
-void d_texture_init(struct d_texture*, int channels, int width, int height);
+void d_texture_init(struct d_texture*, int width, int height);
 void d_texture_free(struct d_texture*);
 void d_texture_clear(struct d_texture*);
 void d_texture_sub_image(struct d_texture*, int x, int y, int w, int h, void* data);
+void d_texture_sub_image_intensity(struct d_texture* t, int x, int y, int w, int h, void* restrict data);
 void d_blit(struct d_texture*, int sx, int sy, int sw, int sh, float dx, float dy);
 
 // counter that increments every frame
@@ -26,9 +28,7 @@ void d_inc_frame_tag();
 uint64_t d_get_frame_tag();
 
 void d_begin(int win_id);
-void d_clear();
-
-void d_set_blend_mode_additive();
+void d_end();
 
 // font
 void d_reset_glyph_cache(int glyph_cache_width, int glyph_cache_height);

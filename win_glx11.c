@@ -12,7 +12,6 @@
 
 #include <X11/Xlib.h>
 #include <X11/XKBlib.h>
-#include <GL/gl.h>
 #include <GL/glx.h>
 #include <GL/glxext.h>
 
@@ -107,25 +106,20 @@ int win_poll_event(struct win_event* e)
 	return 1;
 }
 
-void win_begin(win_id id, int* width_return, int* height_return)
+void win_get_size(win_id id, int* width, int* height)
 {
-	win_make_current(id);
-
-	Window root;
-	int x,y;
-	unsigned int width, height, border_width, depth;
-	XGetGeometry(dpy, id, &root, &x, &y, &width, &height, &border_width, &depth);
-
-	glViewport(0, 0, width, height); CHKGL;
-	if (width_return != NULL) *width_return = width;
-	if (height_return != NULL) *height_return = height;
+	Window _root;
+	int _x, _y;
+	unsigned int _width, _height, _border_width, _depth;
+	XGetGeometry(dpy, id, &_root, &_x, &_y, &_width, &_height, &_border_width, &_depth);
+	if (width != NULL) *width = _width;
+	if (height != NULL) *height = _height;
 }
 
 void win_flip(win_id id)
 {
 	glXSwapBuffers(dpy, id);
 }
-
 
 
 /****************************************************
@@ -290,7 +284,6 @@ int main(int argc, char** argv)
 
 		XSetErrorHandler(old_handler);
 	}
-
 
 	int exit_status = app_main(argc, argv);
 
