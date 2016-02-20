@@ -13,8 +13,15 @@ static stbrp_context rp_ctx;
 static stbrp_node* rp_nodes;
 float dot_u, dot_v;
 
+static inline void initialize()
+{
+	if (!initialized) d_main_atlas_reset();
+	AN(initialized);
+}
+
 static int rect_pack(short width, short height, short* x, short* y)
 {
+	initialize();
 	stbrp_rect rect;
 	rect.w = width + 2;
 	rect.h = height + 2;
@@ -30,12 +37,6 @@ static void pack_dot()
 	short x, y;
 	d_main_atlas_pack_intensity(2, 2, dot, &x, &y);
 	d_texture_get_uv(d_main_atlas_get_texture(), x+1, y+1, &dot_u, &dot_v);
-}
-
-static inline void initialize()
-{
-	if (!initialized) d_main_atlas_reset();
-	AN(initialized);
 }
 
 struct d_texture* d_main_atlas_get_texture()
