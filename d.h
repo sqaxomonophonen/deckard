@@ -1,5 +1,7 @@
 #ifndef D_H
 
+#include "m.h"
+
 #ifdef USE_GL
 #include <GL/gl.h>
 #else
@@ -29,6 +31,9 @@ uint64_t d_get_frame_tag();
 
 void d_begin(int win_id);
 void d_end();
+
+void d_set_color(union vec4 color);
+void d_set_vertical_shade(union vec4 color0, union vec4 color1);
 
 // font
 void d_reset_glyph_cache(int glyph_cache_width, int glyph_cache_height);

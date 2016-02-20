@@ -6,7 +6,6 @@
 #include "scratch.h"
 #include "a.h"
 #include "d.h"
-#include "m.h"
 #include "win.h"
 
 struct draw_vertex {
@@ -54,6 +53,7 @@ static struct {
 	int win_width;
 	int win_height;
 	uint64_t tag;
+	union vec4 color0, color1;
 } draw_scope;
 
 static GLuint create_shader(const char* src, GLenum type)
@@ -351,13 +351,11 @@ void d_blit(struct d_texture* t, int sx, int sy, int sw, int sh, float dx, float
 	float tsx1 = tsx0 + (float)sw / (float)t->width;
 	float tsy1 = tsy0 + (float)sh / (float)t->height;
 
-	union vec4 color = { .r = 1, .g = 1, .b = 1, .a = 1 }; // XXX get from state
-
 	struct draw_vertex vs[4] = {
-		{ .position = { .x = dx0, .y = dy0 }, .uv = { .u = tsx0, .v = tsy0 }, .color = color },
-		{ .position = { .x = dx1, .y = dy0 }, .uv = { .u = tsx1, .v = tsy0 }, .color = color },
-		{ .position = { .x = dx1, .y = dy1 }, .uv = { .u = tsx1, .v = tsy1 }, .color = color },
-		{ .position = { .x = dx0, .y = dy1 }, .uv = { .u = tsx0, .v = tsy1 }, .color = color }
+		{ .position = { .x = dx0, .y = dy0 }, .uv = { .u = tsx0, .v = tsy0 }, .color = draw_scope.color0 },
+		{ .position = { .x = dx1, .y = dy0 }, .uv = { .u = tsx1, .v = tsy0 }, .color = draw_scope.color0 },
+		{ .position = { .x = dx1, .y = dy1 }, .uv = { .u = tsx1, .v = tsy1 }, .color = draw_scope.color1 },
+		{ .position = { .x = dx0, .y = dy1 }, .uv = { .u = tsx0, .v = tsy1 }, .color = draw_scope.color1 }
 	};
 	ElementType es[6] = {0,1,2,0,2,3};
 	draw_append(t, 4, 6, vs, es);
@@ -396,4 +394,15 @@ void d_end()
 	AN(draw_scope.begun);
 	draw_scope.begun = 0;
 	draw_flush();
+}
+
+void d_set_color(union vec4 color)
+{
+	draw_scope.color0 = draw_scope.color1 = color;
+}
+
+void d_set_vertical_shade(union vec4 color0, union vec4 color1)
+{
+	draw_scope.color0 = color0;
+	draw_scope.color1 = color1;
 }

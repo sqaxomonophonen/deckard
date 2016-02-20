@@ -15,7 +15,7 @@ int app_main(int argc, char** argv)
 	d_init();
 	d_reset_glyph_cache(2048, 2048);
 
-	int font_handle = d_open_font("builtin:Aileron-Regular.otf", 10);
+	int font_handle = d_open_font("builtin:Aileron-Regular.otf", 20);
 	if (font_handle == -1) {
 		warnf("could not open font?");
 		return 1;
@@ -38,6 +38,10 @@ int app_main(int argc, char** argv)
 
 		d_begin(main_window);
 
+		d_set_vertical_shade(
+			(union vec4) { .r = 1, .g = 0.9, .b = 0.8, .a = 0.0 },
+			(union vec4) { .r = 0.5, .g = 0.25, .b = 0.125, .a = 0.0 }
+		);
 		d_text_set_cursor(20.0 + ((float)d_get_frame_tag()) / 32.0, 20 + ((float)d_get_frame_tag()) / 64.0);
 		d_printf(font_handle, "hello world HELLO WORLD!!?@#!$^&*( joeqsixpack@gmail.com\nframe tag: %ld", d_get_frame_tag());
 
