@@ -28,9 +28,13 @@ void arghf(const char* fmt, ...) __attribute__((noreturn)) __attribute__((format
 		} \
 	} while (0)
 
-// paranoid (TODO disable in production)
+#ifdef PARANOID
 #define PARANOID_ASSERT ASSERT
 #define PARANOID_WRONG WRONG
+#else
+#define PARANOID_ASSERT(x)
+#define PARANOID_WRONG(x)
+#endif
 
 #define _A_H_
 #endif
