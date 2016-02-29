@@ -168,6 +168,17 @@ static void draw_append(struct d_texture* texture, int n_vertices, int n_element
 	draw_res.texture_batches[draw_res.n_texture_batches - 1].n_elements += n_elements;
 }
 
+static void texture_pre_modify(struct d_texture* t)
+{
+	if (t->draw_tag == draw_scope.tag) {
+		/* texture is being used in current draw scope, so flush
+		 * pending draw commands before altering the texture */
+		draw_flush();
+		t->draw_tag = 0;
+	}
+}
+
+
 
 //////////////////////////////////////////////
 // public
@@ -296,6 +307,8 @@ void d_texture_free(struct d_texture* t)
 
 void d_texture_clear(struct d_texture* t)
 {
+	texture_pre_modify(t);
+
 	MTS_ENTER(0);
 	void* tmp = MTS_calloc_ptr(t->width * t->height * 4);
 	d_texture_sub_image(t, 0, 0, t->width, t->height, tmp);
@@ -304,12 +317,7 @@ void d_texture_clear(struct d_texture* t)
 
 void d_texture_sub_image(struct d_texture* t, int x, int y, int w, int h, void* data)
 {
-	if (t->draw_tag == draw_scope.tag) {
-		/* texture is being used in current draw scope, so flush
-		 * pending draw commands before altering the texture */
-		draw_flush();
-		t->draw_tag = 0;
-	}
+	texture_pre_modify(t);
 
 	int level = 0;
 	glBindTexture(GL_TEXTURE_2D, t->texture);
