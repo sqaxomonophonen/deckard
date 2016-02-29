@@ -65,7 +65,7 @@ static inline void* scratch_calloc_ptr(struct scratch* ms, size_t sz)
 extern struct scratch main_thread_scratch;
 #define MTS_get_top() main_thread_scratch.top
 #define MTS_set_top(p) do { main_thread_scratch.top = p; } while (0)
-#define MTS_ENTER(x) size_t _mts_top_ ## x= MTS_get_top()
+#define MTS_ENTER(x) size_t _mts_top_ ## x = MTS_get_top()
 #define MTS_LEAVE(x) MTS_set_top(_mts_top_ ## x)
 #define MTS_deref(p) scratch_deref(&main_thread_scratch, p)
 #define MTS_alloc_align_log2(sz, align_log2) scratch_alloc_align_log2(&main_thread_scratch, sz, align_log2)
