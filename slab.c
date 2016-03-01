@@ -20,7 +20,6 @@
 #endif
 typedef uint16_t freelist_t;
 #define MAX_PTR_RANGES (NUM_SIZES * MAX_SLABS_PER_ITEM_SIZE)
-#define MAX_FALLBACK_ALLOCATIONS (1<<16)
 
 struct slab {
 	void* begin;
