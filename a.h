@@ -4,13 +4,19 @@
 
 /* a for assert, argh, abort, abandon ye all hope, and so on */
 
-void arghf(const char* fmt, ...) __attribute__((noreturn)) __attribute__((format (printf, 1, 2)));
-
 // general assertions
+#ifdef UNITTEST
+#define ARGHF ut_arghf
+#else
+#define ARGHF arghf
+#endif
+
+void ARGHF(const char* fmt, ...) __attribute__((noreturn)) __attribute__((format (printf, 1, 2)));
+
 #define ASSERT(cond) \
 	do { \
 		if (!(cond)) { \
-			arghf("ASSERT(%s) failed in %s() in %s:%d\n", #cond, __func__, __FILE__, __LINE__); \
+			ARGHF("ASSERT(%s) failed in %s() in %s:%d\n", #cond, __func__, __FILE__, __LINE__); \
 		} \
 	} while (0)
 
@@ -24,7 +30,7 @@ void arghf(const char* fmt, ...) __attribute__((noreturn)) __attribute__((format
 	do { \
 		GLenum CHKGL_error = glGetError(); \
 		if (CHKGL_error != GL_NO_ERROR) { \
-			arghf("OPENGL ERROR %d in %s:%d\n", CHKGL_error, __FILE__, __LINE__); \
+			ARGHF("OPENGL ERROR %d in %s:%d\n", CHKGL_error, __FILE__, __LINE__); \
 		} \
 	} while (0)
 
