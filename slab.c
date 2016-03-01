@@ -337,6 +337,10 @@ static void test_can_alloc_at_limit()
 	AZ(slab_can_alloc_log2(sz_log2));
 	slab_free(ptrs[0]);
 	AN(slab_can_alloc_log2(sz_log2));
+	ptrs[0] = slab_alloc_log2(sz_log2);
+	AZ(slab_can_alloc_log2(sz_log2));
+	slab_free(ptrs[n/2]);
+	AN(slab_can_alloc_log2(sz_log2));
 }
 
 static void test_simple_allocations()
