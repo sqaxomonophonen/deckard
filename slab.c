@@ -126,6 +126,8 @@ static inline int get_sz_log2_from_slab_size_index(int slab_size_index)
 
 static void* fallback_alloc(int sz_log2)
 {
+	ASSERT(n_fallback_allocations < MAX_FALLBACK_ALLOCATIONS);
+
 	void* p = mem_alloc(1 << sz_log2);
 	AN(p);
 
@@ -152,6 +154,8 @@ static void* fallback_alloc(int sz_log2)
 
 static void fallback_free(void* p)
 {
+	ASSERT(n_fallback_allocations > 0);
+
 	int idx = fallback_allocation_exact_bin_search(p);
 	ASSERT(idx != -1);
 	struct fallback_allocation* fa = &fallback_allocations[idx];
