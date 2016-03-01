@@ -245,23 +245,6 @@ void* slab_calloc_log2(int sz_log2)
 	return p;
 }
 
-void* slab_realloc_log2(void* old_ptr, int new_sz_log2)
-{
-	struct ptr_range* pr = ptr_range_bin_search(old_ptr);
-	AN(pr);
-
-	int old_sz_log2 = get_sz_log2_from_slab_size_index(pr->slab_size_index);
-	if (new_sz_log2 == old_sz_log2) return old_ptr;
-
-	void* new_ptr = slab_alloc_log2(new_sz_log2);
-	int to_copy_log2 = new_sz_log2 > old_sz_log2 ? old_sz_log2 : new_sz_log2;
-	memcpy(new_ptr, old_ptr, 1 << to_copy_log2);
-
-	slab_free(old_ptr);
-
-	return new_ptr;
-}
-
 void slab_free(void* p)
 {
 	struct ptr_range* pr = ptr_range_bin_search(p);
@@ -459,49 +442,6 @@ static void fail_to_free_invalid_ptr()
 	slab_free(p + 1);
 }
 
-static void test_slab_realloc()
-{
-	int n_active_slabs, n_allocated;
-
-	// initial allocation
-	uint32_t* p0 = slab_alloc(20);
-	count_active_slabs_and_allocated(&n_active_slabs, &n_allocated);
-	ASSERT(n_active_slabs == 1);
-	ASSERT(n_allocated == 1);
-	ASSERT(ut_allocations == 2);
-
-	*p0 = 0xdeadbeef; // tracer
-
-	// reallocating to new slab
-	uint32_t* p1 = slab_realloc(p0, 40);
-	ASSERT(p0 != p1);
-	ASSERT(*p1 == 0xdeadbeef);
-	count_active_slabs_and_allocated(&n_active_slabs, &n_allocated);
-	ASSERT(n_active_slabs == 2);
-	ASSERT(n_allocated == 1);
-	ASSERT(ut_allocations == 4);
-
-	// reallocating to old slab; assuming it gets same ptr as initial
-	// allocation
-	uint32_t* p2 = slab_realloc(p0, 19);
-	ASSERT(*p2 == 0xdeadbeef);
-	ASSERT(p2 != p1);
-	ASSERT(p2 == p0);
-	count_active_slabs_and_allocated(&n_active_slabs, &n_allocated);
-	ASSERT(n_active_slabs == 2);
-	ASSERT(n_allocated == 1);
-	ASSERT(ut_allocations == 4);
-
-	// no-op reallocation
-	uint32_t* p3 = slab_realloc(p0, 18);
-	ASSERT(*p3 == 0xdeadbeef);
-	ASSERT(p3 == p2);
-	count_active_slabs_and_allocated(&n_active_slabs, &n_allocated);
-	ASSERT(n_active_slabs == 2);
-	ASSERT(n_allocated == 1);
-	ASSERT(ut_allocations == 4);
-}
-
 void pre_test()
 {
 	memset(slab_sizes, 0, sizeof(slab_sizes));
@@ -542,7 +482,6 @@ void run_tests()
 	TEST(test_freeing_stuff);
 	TEST(test_freeing_multiple_sizes);
 	TEST(fail_to_free_invalid_ptr);
-	TEST(test_slab_realloc);
 }
 
 #endif
