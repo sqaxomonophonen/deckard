@@ -11,7 +11,7 @@
 
 #define ITEM_SIZE_MALLOC_THRESHOLD_MIN_LOG2 (4)
 #define ITEM_SIZE_MALLOC_THRESHOLD_MAX_LOG2 (16)
-#define NUM_SIZES (ITEM_SIZE_MALLOC_THRESHOLD_MAX_LOG2 - ITEM_SIZE_MALLOC_THRESHOLD_MIN_LOG2)
+#define NUM_SIZES (ITEM_SIZE_MALLOC_THRESHOLD_MAX_LOG2 - ITEM_SIZE_MALLOC_THRESHOLD_MIN_LOG2 + 1)
 #define MAX_SLABS_PER_ITEM_SIZE (256)
 #define SLAB_SPACE_LOG2 (20)
 #define MAX_ALLOCS_PER_SLAB_LOG2 (SLAB_SPACE_LOG2 - ITEM_SIZE_MALLOC_THRESHOLD_MIN_LOG2)
@@ -40,18 +40,10 @@ struct ptr_range {
 	int slab_index;
 };
 
-struct fallback_allocation {
-	void* ptr;
-	int sz_log2;
-};
-
 static struct slab_size slab_sizes[NUM_SIZES];
 
 static int n_ptr_ranges;
 static struct ptr_range ptr_ranges[MAX_PTR_RANGES];
-
-static int n_fallback_allocations;
-static struct fallback_allocation fallback_allocations[MAX_FALLBACK_ALLOCATIONS];
 
 static int in_ptr_range(void* p, int i)
 {
@@ -87,30 +79,6 @@ static struct ptr_range* ptr_range_bin_search(void* p)
 	return NULL;
 }
 
-static int fallback_allocation_near_bin_search(void* p)
-{
-	int low = 0;
-	int high = n_fallback_allocations - 1;
-	while (low < high) {
-		int mid = (low + high) >> 1;
-		if (fallback_allocations[mid].ptr < p) {
-			low = mid + 1;
-		} else {
-			high = mid;
-		}
-	}
-	if (low != high) return -1;
-	return low;
-}
-
-static int fallback_allocation_exact_bin_search(void* p)
-{
-	int i = fallback_allocation_near_bin_search(p);
-	if (i == -1) return -1;
-	if (fallback_allocations[i].ptr != p) return -1;
-	return i;
-}
-
 static inline int get_slab_size_index_for_sz_log2(int sz_log2)
 {
 	int i = sz_log2 - ITEM_SIZE_MALLOC_THRESHOLD_MIN_LOG2;
@@ -122,53 +90,6 @@ static inline int get_slab_size_index_for_sz_log2(int sz_log2)
 static inline int get_sz_log2_from_slab_size_index(int slab_size_index)
 {
 	return slab_size_index + ITEM_SIZE_MALLOC_THRESHOLD_MIN_LOG2;
-}
-
-static void* fallback_alloc(int sz_log2)
-{
-	ASSERT(n_fallback_allocations < MAX_FALLBACK_ALLOCATIONS);
-
-	void* p = mem_alloc(1 << sz_log2);
-	AN(p);
-
-	int i = fallback_allocation_near_bin_search(p);
-	struct fallback_allocation* fa;
-	if (i == -1) {
-		AZ(n_fallback_allocations);
-		fa = &fallback_allocations[0];
-	} else {
-		if (fallback_allocations[i].ptr < p) i++;
-		int to_move = n_fallback_allocations - i;
-		if (to_move > 0) {
-			memmove(&fallback_allocations[i+1], &fallback_allocations[i], to_move * sizeof(*fallback_allocations));
-		}
-		fa = &fallback_allocations[i];
-	}
-
-	fa->ptr = p;
-	fa->sz_log2 = sz_log2;
-	n_fallback_allocations++;
-
-	return p;
-}
-
-static void fallback_free(void* p)
-{
-	ASSERT(n_fallback_allocations > 0);
-
-	int idx = fallback_allocation_exact_bin_search(p);
-	ASSERT(idx != -1);
-	struct fallback_allocation* fa = &fallback_allocations[idx];
-	ASSERT(fa->ptr == p);
-
-	n_fallback_allocations--;
-
-	int to_move = n_fallback_allocations - idx;
-	if (to_move > 0) {
-		memmove(&fallback_allocations[idx], &fallback_allocations[idx+1], to_move * sizeof(*fallback_allocations));
-	}
-
-	mem_free(p);
 }
 
 static inline int get_max_allocations_log2(int sz_log2)
@@ -267,31 +188,54 @@ static int freelist_index_count(struct slab* slab, int sz_log2, int allocation_i
 }
 #endif
 
+int slab_can_alloc_log2(int sz_log2)
+{
+	ASSERT(sz_log2 >= 0);
+	if (sz_log2 > ITEM_SIZE_MALLOC_THRESHOLD_MAX_LOG2) return 0;
+
+	sz_log2 = sz_log2_min(sz_log2);
+
+	int slab_size_index = get_slab_size_index_for_sz_log2(sz_log2);
+	struct slab_size* ss = &slab_sizes[slab_size_index];
+	if (ss->n_active_slabs < MAX_SLABS_PER_ITEM_SIZE) return 1;
+
+	int max_allocations = get_max_allocations(sz_log2);
+
+	ASSERT(ss->last_used >= 0);
+	ASSERT(ss->last_used < MAX_SLABS_PER_ITEM_SIZE);
+	if (ss->slabs[ss->last_used].n_allocated < max_allocations) return 1;
+
+	for (int i = 0; i < ss->n_active_slabs; i++) {
+		if (ss->slabs[i].n_allocated < max_allocations) return 1;
+	}
+
+	return 0;
+}
+
 void* slab_alloc_log2(int sz_log2)
 {
-	if (sz_log2 > ITEM_SIZE_MALLOC_THRESHOLD_MAX_LOG2) {
-		return fallback_alloc(sz_log2);
-	} else {
-		sz_log2 = sz_log2_min(sz_log2);
-		int slab_size_index = get_slab_size_index_for_sz_log2(sz_log2);
-		struct slab_size* ss = &slab_sizes[slab_size_index ];
-		ASSERT(ss->last_used >= 0);
-		ASSERT(ss->last_used < MAX_SLABS_PER_ITEM_SIZE);
-		void* p = try_alloc(ss, ss->last_used, sz_log2);
+	ASSERT(sz_log2 <= ITEM_SIZE_MALLOC_THRESHOLD_MAX_LOG2);
+
+	sz_log2 = sz_log2_min(sz_log2);
+	int slab_size_index = get_slab_size_index_for_sz_log2(sz_log2);
+	struct slab_size* ss = &slab_sizes[slab_size_index];
+	ASSERT(ss->last_used >= 0);
+	ASSERT(ss->last_used < MAX_SLABS_PER_ITEM_SIZE);
+
+	void* p = try_alloc(ss, ss->last_used, sz_log2);
+	if (p != NULL) return p;
+
+	for (int i = 0; i < ss->n_active_slabs; i++) {
+		p = try_alloc(ss, i, sz_log2);
 		if (p != NULL) return p;
-		for (int i = 0; i < ss->n_active_slabs; i++) {
-			void* p = try_alloc(ss, i, sz_log2);
-			if (p != NULL) return p;
-		}
-		int new_index = new_slab(slab_size_index);
-		if (new_index == -1) {
-			return fallback_alloc(sz_log2);
-		} else {
-			void* p = try_alloc(ss, new_index, sz_log2);
-			AN(p);
-			return p;
-		}
 	}
+
+	int new_index = new_slab(slab_size_index);
+	ASSERT(new_index >= 0);
+
+	p = try_alloc(ss, new_index, sz_log2);
+	AN(p);
+	return p;
 }
 
 void* slab_calloc_log2(int sz_log2)
@@ -304,33 +248,24 @@ void* slab_calloc_log2(int sz_log2)
 void* slab_realloc_log2(void* old_ptr, int new_sz_log2)
 {
 	struct ptr_range* pr = ptr_range_bin_search(old_ptr);
-	int old_sz_log2;
-	if (pr == NULL) {
-		int faidx = fallback_allocation_exact_bin_search(old_ptr);
-		ASSERT(faidx >= 0);
-		struct fallback_allocation* fa = &fallback_allocations[faidx];
-		ASSERT(fa->ptr == old_ptr);
-		old_sz_log2 = fa->sz_log2;
-		if (new_sz_log2 == old_sz_log2) return old_ptr;
-	} else {
-		old_sz_log2 = get_sz_log2_from_slab_size_index(pr->slab_size_index);
-		if (new_sz_log2 == old_sz_log2) return old_ptr;
-	}
+	AN(pr);
+
+	int old_sz_log2 = get_sz_log2_from_slab_size_index(pr->slab_size_index);
+	if (new_sz_log2 == old_sz_log2) return old_ptr;
 
 	void* new_ptr = slab_alloc_log2(new_sz_log2);
 	int to_copy_log2 = new_sz_log2 > old_sz_log2 ? old_sz_log2 : new_sz_log2;
 	memcpy(new_ptr, old_ptr, 1 << to_copy_log2);
+
 	slab_free(old_ptr);
+
 	return new_ptr;
 }
 
 void slab_free(void* p)
 {
 	struct ptr_range* pr = ptr_range_bin_search(p);
-	if (pr == NULL) {
-		fallback_free(p);
-		return;
-	}
+	AN(pr);
 
 	struct slab* slab = &slab_sizes[pr->slab_size_index].slabs[pr->slab_index];
 	ASSERT(slab->n_allocated > 0);
@@ -395,6 +330,31 @@ static void test_functional()
 	ASSERT(sz_log2_min(5) == 5);
 }
 
+static void test_can_alloc()
+{
+	AN(slab_can_alloc(4));
+	AN(slab_can_alloc(100));
+	AN(slab_can_alloc(65536));
+	AZ(slab_can_alloc(65536+1));
+	AZ(slab_can_alloc(100000));
+}
+
+static void test_can_alloc_at_limit()
+{
+	int sz_log2 = 16;
+	int n = MAX_SLABS_PER_ITEM_SIZE << (SLAB_SPACE_LOG2 - sz_log2);
+	void* ptrs[n];
+	for (int i = 0; i < n; i++) ptrs[i] = slab_alloc_log2(sz_log2);
+	ASSERT(ut_allocations == 512);
+
+	AZ(slab_can_alloc_log2(sz_log2));
+	slab_free(ptrs[n-1]);
+	AN(slab_can_alloc_log2(sz_log2));
+	ptrs[n-1] = slab_alloc_log2(sz_log2);
+	AZ(slab_can_alloc_log2(sz_log2));
+	slab_free(ptrs[0]);
+	AN(slab_can_alloc_log2(sz_log2));
+}
 
 static void test_simple_allocations()
 {
@@ -499,59 +459,6 @@ static void fail_to_free_invalid_ptr()
 	slab_free(p + 1);
 }
 
-static void test_malloc_fallback()
-{
-	slab_alloc(20);
-	ASSERT(ut_allocations == 2);
-	ASSERT(ut_frees == 0);
-
-	void* p = slab_alloc(65536 + 1); // fallback allocation threshold plus one
-	ASSERT(n_fallback_allocations == 1);
-	ASSERT(ut_allocations == 3);
-	ASSERT(ut_frees == 0);
-
-	slab_free(p);
-	ASSERT(n_fallback_allocations == 0);
-	ASSERT(ut_allocations == 3);
-	ASSERT(ut_frees == 1);
-}
-
-static void test_multiple_with_malloc_fallback()
-{
-	int n = 64;
-	void* ptrs[n];
-	for (int i = 0; i < n; i++) {
-		ptrs[i] = slab_alloc(65536+1);
-		ASSERT(n_fallback_allocations == i+1);
-		ASSERT(ut_allocations == i+1);
-	}
-
-	for (int i = 0; i < n; i++) {
-		if (i&1) {
-			slab_free(ptrs[i]);
-		}
-	}
-	ASSERT(n_fallback_allocations == n/2);
-	ASSERT(ut_allocations == n);
-	ASSERT(ut_frees == n/2);
-
-	for (int i = 0; i < n; i++) {
-		if (i&1) {
-			ptrs[i] = slab_alloc((1<<18));
-		}
-	}
-	ASSERT(n_fallback_allocations == n);
-	ASSERT(ut_allocations == n*3/2);
-
-	for (int i = 0; i < n; i++) {
-		slab_free(ptrs[i]);
-	}
-	ASSERT(n_fallback_allocations == 0);
-	ASSERT(ut_allocations == n*3/2);
-	ASSERT(ut_frees == n*3/2);
-
-}
-
 static void test_slab_realloc()
 {
 	int n_active_slabs, n_allocated;
@@ -595,58 +502,11 @@ static void test_slab_realloc()
 	ASSERT(ut_allocations == 4);
 }
 
-static void test_fallback_realloc()
-{
-	int n_active_slabs, n_allocated;
-
-	uint32_t* p0 = slab_alloc(100);
-	ASSERT(ut_frees == 0);
-	ASSERT(ut_allocations == 2);
-	count_active_slabs_and_allocated(&n_active_slabs, &n_allocated);
-	ASSERT(n_active_slabs == 1);
-	ASSERT(n_allocated == 1);
-	ASSERT(n_fallback_allocations == 0);
-
-	*p0 = 0xdeadbeef;
-
-	uint32_t* p1 = slab_realloc(p0, 100000);
-	ASSERT(p1 != p0);
-	ASSERT(ut_frees == 0);
-	ASSERT(ut_allocations == 3);
-	ASSERT(*p1 == 0xdeadbeef);
-	count_active_slabs_and_allocated(&n_active_slabs, &n_allocated);
-	ASSERT(n_allocated == 0);
-	ASSERT(n_active_slabs == 1);
-	ASSERT(n_fallback_allocations == 1);
-
-	uint32_t* p2 = slab_realloc(p1, 200000);
-	ASSERT(p2 != p1);
-	ASSERT(ut_frees == 1);
-	ASSERT(ut_allocations == 4);
-	ASSERT(*p2 == 0xdeadbeef);
-	count_active_slabs_and_allocated(&n_active_slabs, &n_allocated);
-	ASSERT(n_allocated == 0);
-	ASSERT(n_active_slabs == 1);
-	ASSERT(n_fallback_allocations == 1);
-
-	uint32_t* p3 =  slab_realloc(p2, 1000);
-	ASSERT(p3 != p2);
-	ASSERT(ut_frees == 2);
-	ASSERT(ut_allocations == 6);
-	ASSERT(*p3 == 0xdeadbeef);
-	count_active_slabs_and_allocated(&n_active_slabs, &n_allocated);
-	ASSERT(n_allocated == 1);
-	ASSERT(n_active_slabs == 2);
-	ASSERT(n_fallback_allocations == 0);
-}
-
 void pre_test()
 {
 	memset(slab_sizes, 0, sizeof(slab_sizes));
 	n_ptr_ranges = 0;
 	memset(ptr_ranges, 0, sizeof(ptr_ranges));
-	n_fallback_allocations = 0;
-	memset(fallback_allocations, 0, sizeof(fallback_allocations));
 }
 
 void post_test()
@@ -670,26 +530,19 @@ void post_test()
 	AZ(n_allocated);
 
 	n_ptr_ranges = 0;
-
-	for (int i = 0; i < n_fallback_allocations; i++) {
-		mem_free(fallback_allocations[i].ptr);
-	}
-	n_fallback_allocations = 0;
-
 }
 
 void run_tests()
 {
 	TEST(test_functional);
+	TEST(test_can_alloc);
+	TEST(test_can_alloc_at_limit);
 	TEST(test_simple_allocations);
 	TEST(test_using_multiple_slabs_per_size);
 	TEST(test_freeing_stuff);
 	TEST(test_freeing_multiple_sizes);
 	TEST(fail_to_free_invalid_ptr);
-	TEST(test_malloc_fallback);
-	TEST(test_multiple_with_malloc_fallback);
 	TEST(test_slab_realloc);
-	TEST(test_fallback_realloc);
 }
 
 #endif
